@@ -12,7 +12,7 @@ def load_kenlm():
 
 
 def to_gpu(gpu, var):
-    if gpu:
+    if gpu and torch.cuda.is_available():
         return var.cuda()
     return var
 

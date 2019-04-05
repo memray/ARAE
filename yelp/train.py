@@ -113,7 +113,7 @@ parser.add_argument('--cuda', dest='cuda', action='store_true',
                     help='use CUDA')
 parser.add_argument('--no-cuda', dest='cuda', action='store_true',
                     help='not using CUDA')
-parser.set_defaults(cuda=True)
+# parser.set_defaults(cuda=True)
 parser.add_argument('--device_id', type=str, default='0')
 
 args = parser.parse_args()
@@ -255,7 +255,7 @@ def train_classifier(whichclass, batch):
     classify_loss = F.binary_cross_entropy(scores.squeeze(1), labels)
     classify_loss.backward()
     optimizer_classify.step()
-    classify_loss = classify_loss.cpu().data[0]
+    classify_loss = classify_loss.cpu().item()
 
     pred = scores.data.round().squeeze(1)
     accuracy = pred.eq(labels.data).float().mean()
@@ -284,7 +284,7 @@ def classifier_regularize(whichclass, batch):
     classify_reg_loss = F.binary_cross_entropy(scores.squeeze(1), labels)
     classify_reg_loss.backward()
 
-    torch.nn.utils.clip_grad_norm(autoencoder.parameters(), args.clip)
+    torch.nn.utils.clip_grad_norm_(autoencoder.parameters(), args.clip)
     optimizer_ae.step()
 
     return classify_reg_loss
@@ -318,7 +318,7 @@ def evaluate_autoencoder(whichdecoder, data_source, epoch):
             # accuracy
             max_vals1, max_indices1 = torch.max(masked_output, 1)
             all_accuracies += \
-                torch.mean(max_indices1.eq(masked_target).float()).data[0]
+                torch.mean(max_indices1.eq(masked_target).float()).data.item()
         
             max_values1, max_indices1 = torch.max(output, 2)
             max_indices2 = autoencoder.generate(2, hidden, maxlen=50)
@@ -330,7 +330,7 @@ def evaluate_autoencoder(whichdecoder, data_source, epoch):
             # accuracy
             max_vals2, max_indices2 = torch.max(masked_output, 1)
             all_accuracies += \
-                torch.mean(max_indices2.eq(masked_target).float()).data[0]
+                torch.mean(max_indices2.eq(masked_target).float()).data.item()
 
             max_values2, max_indices2 = torch.max(output, 2)
             max_indices1 = autoencoder.generate(1, hidden, maxlen=50)
@@ -357,7 +357,7 @@ def evaluate_autoencoder(whichdecoder, data_source, epoch):
                 f_trans.write(chars)
                 f_trans.write("\n")
 
-    return total_loss[0] / len(data_source), all_accuracies/bcnt
+    return total_loss.item() / len(data_source), all_accuracies/bcnt
 
 
 def evaluate_generator(whichdecoder, noise, epoch):
@@ -403,8 +403,8 @@ def train_ae(whichdecoder, batch, total_loss_ae, start_time, i):
     loss = criterion_ce(masked_output/args.temp, masked_target)
     loss.backward()
 
-    # `clip_grad_norm` to prevent exploding gradient in RNNs / LSTMs
-    torch.nn.utils.clip_grad_norm(autoencoder.parameters(), args.clip)
+    # `clip_grad_norm_` to prevent exploding gradient in RNNs / LSTMs
+    torch.nn.utils.clip_grad_norm_(autoencoder.parameters(), args.clip)
     optimizer_ae.step()
 
     total_loss_ae += loss.data
@@ -413,8 +413,8 @@ def train_ae(whichdecoder, batch, total_loss_ae, start_time, i):
     if i % args.log_interval == 0 and i > 0:
         probs = F.softmax(masked_output, dim=-1)
         max_vals, max_indices = torch.max(probs, 1)
-        accuracy = torch.mean(max_indices.eq(masked_target).float()).data[0]
-        cur_loss = total_loss_ae[0] / args.log_interval
+        accuracy = torch.mean(max_indices.eq(masked_target).float()).data.item()
+        cur_loss = total_loss_ae.item() / args.log_interval
         elapsed = time.time() - start_time
         print('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
               'loss {:5.2f} | ppl {:8.2f} | acc {:8.2f}'
@@ -459,13 +459,18 @@ def calc_gradient_penalty(netD, real_data, fake_data):
     bsz = real_data.size(0)
     alpha = torch.rand(bsz, 1)
     alpha = alpha.expand(bsz, real_data.size(1))  # only works for 2D XXX
-    alpha = alpha.cuda()
+    if torch.cuda.is_available():
+        alpha = alpha.cuda()
     interpolates = alpha * real_data + ((1 - alpha) * fake_data)
     interpolates = Variable(interpolates, requires_grad=True)
     disc_interpolates = netD(interpolates)
 
+    outputs = torch.ones(disc_interpolates.size())
+    if torch.cuda.is_available():
+        outputs = outputs.cuda()
+
     gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates,
-                                    grad_outputs=torch.ones(disc_interpolates.size()).cuda(),
+                                    grad_outputs=outputs,
                                     create_graph=True, retain_graph=True, only_inputs=True)[0]
     gradients = gradients.view(gradients.size(0), -1)
 
@@ -522,7 +527,7 @@ def train_gan_d_into_ae(whichdecoder, batch):
     real_hidden.register_hook(grad_hook)
     errD_real = gan_disc(real_hidden)
     errD_real.backward(mone)
-    torch.nn.utils.clip_grad_norm(autoencoder.parameters(), args.clip)
+    torch.nn.utils.clip_grad_norm_(autoencoder.parameters(), args.clip)
 
     optimizer_ae.step()
 
@@ -619,16 +624,16 @@ for epoch in range(1, args.epochs+1):
             print('[%d/%d][%d/%d] Loss_D: %.4f (Loss_D_real: %.4f '
                   'Loss_D_fake: %.4f) Loss_G: %.4f'
                   % (epoch, args.epochs, niter, len(train1_data),
-                     errD.data[0], errD_real.data[0],
-                     errD_fake.data[0], errG.data[0]))
+                     errD.data.item(), errD_real.data.item(),
+                     errD_fake.data.item(), errG.data.item()))
             print("Classify loss: {:5.2f} | Classify accuracy: {:3.3f}\n".format(
                     classify_loss, classify_acc))
             with open("{}/log.txt".format(args.outf), 'a') as f:
                 f.write('[%d/%d][%d/%d] Loss_D: %.4f (Loss_D_real: %.4f '
                         'Loss_D_fake: %.4f) Loss_G: %.4f\n'
                         % (epoch, args.epochs, niter, len(train1_data),
-                           errD.data[0], errD_real.data[0],
-                           errD_fake.data[0], errG.data[0]))
+                           errD.data.item(), errD_real.data.item(),
+                           errD_fake.data.item(), errG.data.item()))
                 f.write("Classify loss: {:5.2f} | Classify accuracy: {:3.3f}\n".format(
                         classify_loss, classify_acc))
 

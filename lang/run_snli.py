@@ -100,4 +100,4 @@ args = parser.parse_args()
 print(vars(args))
 
 
-exec(open("train.py").read())
+# exec(open("train.py").read())

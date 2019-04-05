@@ -15,8 +15,11 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from utils import to_gpu, Corpus, batchify, train_ngram_lm, get_ppl, create_exp_dir
-from models import Seq2Seq, MLP_D, MLP_G
+from lang.utils import to_gpu, Corpus, batchify, train_ngram_lm, get_ppl, create_exp_dir
+from lang.models import Seq2Seq, MLP_D, MLP_G
+
+
+exec(open("run_snli.py").read())
 
 # Set the random seed manually for reproducibility.
 random.seed(args.seed) 
@@ -79,12 +82,16 @@ optimizer_gan_g = optim.Adam(gan_gen.parameters(),
 optimizer_gan_d = optim.Adam(gan_disc.parameters(),
                              lr=args.lr_gan_d,
                              betas=(args.beta1, 0.999))
-autoencoder = autoencoder.cuda()
-gan_gen = gan_gen.cuda()
-gan_disc = gan_disc.cuda()
+
+if torch.cuda.is_available():
+    autoencoder = autoencoder.cuda()
+    gan_gen = gan_gen.cuda()
+    gan_disc = gan_disc.cuda()
+    one = torch.Tensor(1).fill_(1).cuda()
+else:
+    one = torch.Tensor(1).fill_(1)
 
 # global vars
-one = torch.Tensor(1).fill_(1).cuda()
 mone = one * -1
 
 ###############################################################################
