@@ -25,6 +25,7 @@ class Dictionary(object):
         self.word2idx['<sos>'] = 1
         self.word2idx['<eos>'] = 2
         self.word2idx['<oov>'] = 3
+        self.word2idx['<target>'] = 4
         self.wordcounts = {}
 
     # to track word counts
@@ -38,6 +39,10 @@ class Dictionary(object):
     def prune_vocab(self, k=5, cnt=False):
         # get all words and their respective counts
         vocab_list = [(word, count) for word, count in self.wordcounts.items()]
+
+        for w_id, (w, freq) in enumerate(vocab_list):
+            print("\t[%d] %s \t: %d" % (w_id, w, freq))
+
         if cnt:
             # prune by count
             self.pruned_vocab = \
@@ -47,16 +52,17 @@ class Dictionary(object):
             vocab_list.sort(key=lambda x: (x[1], x[0]), reverse=True)
             k = min(k, len(vocab_list))
             self.pruned_vocab = [pair[0] for pair in vocab_list[:k]]
-        # sort to make vocabulary determistic
-        self.pruned_vocab.sort()
+            # sort to make vocabulary deterministic
+            self.pruned_vocab.sort()
 
         # add all chosen words to new vocabulary/dict
         for word in self.pruned_vocab:
             if word not in self.word2idx:
                 self.word2idx[word] = len(self.word2idx)
-        print("original vocab {}; pruned to {}".
+        print("Original vocab {}; Pruned to {}".
               format(len(self.wordcounts), len(self.word2idx)))
         self.idx2word = {v: k for k, v in self.word2idx.items()}
+
 
     def __len__(self):
         return len(self.word2idx)

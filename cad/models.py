@@ -12,14 +12,14 @@ import numpy as np
 
 class MLP_D(nn.Module):
     def __init__(self, ninput, noutput, layers,
-                 activation=nn.LeakyReLU(0.2), gpu=True):
+                 activation=nn.LeakyReLU(0.2)):
         super(MLP_D, self).__init__()
         self.ninput = ninput
         self.noutput = noutput
 
-        layer_sizes = [ninput] + [int(x) for x in layers.split('-')]
+        # main network
+        layer_sizes = [ninput * 2] + [int(x) for x in layers.split('-')]
         self.layers = []
-
         for i in range(len(layer_sizes)-1):
             layer = nn.Linear(layer_sizes[i], layer_sizes[i+1])
             self.layers.append(layer)
@@ -34,16 +34,38 @@ class MLP_D(nn.Module):
             self.layers.append(activation)
             self.add_module("activation"+str(i+1), activation)
 
+        # output layer
         layer = nn.Linear(layer_sizes[-1], noutput)
         self.layers.append(layer)
         self.add_module("layer"+str(len(self.layers)), layer)
 
+        # projection layers for context
+        layer_sizes = [ninput] + [int(x) for x in layers.split('-')]
+        self.proj_layers = []
+        for i in range(len(layer_sizes)-1):
+            layer = nn.Linear(layer_sizes[i], layer_sizes[i+1])
+            self.proj_layers.append(layer)
+            self.add_module("context-proj-layer"+str(i+1), layer)
+
+            # No batch normalization after first layer
+            if i != 0:
+                bn = nn.BatchNorm1d(layer_sizes[i+1], eps=1e-05, momentum=0.1)
+                self.proj_layers.append(bn)
+                self.add_module("context-proj-bn"+str(i+1), bn)
+
+            self.proj_layers.append(activation)
+            self.add_module("context-proj-activation"+str(i+1), activation)
+
         self.init_weights()
 
-    def forward(self, x):
+    def forward(self, sf, lf, con):
+        for i, layer in enumerate(self.proj_layers):
+            con = layer(con)
+
+        x = torch.cat([sf + con, lf], dim=1)
         for i, layer in enumerate(self.layers):
             x = layer(x)
-        x = torch.mean(x)
+
         return x
 
     def init_weights(self):
@@ -171,7 +193,13 @@ class Seq2Seq(nn.Module):
     def forward(self, indices, lengths, noise, encode_only=False):
         batch_size, maxlen = indices.size()
 
-        hidden = self.encode(indices, lengths, noise)
+        order = torch.argsort(lengths, descending=True)
+        ordered_indices = torch.index_select(indices, dim=0, index=order)
+        ordered_lengths = torch.index_select(lengths, dim=0, index=order)
+        ordered_hidden = self.encode(ordered_indices, ordered_lengths, noise)
+
+        argsorted_order = torch.argsort(order, descending=False)
+        hidden = ordered_hidden.index_select(dim=0, index=argsorted_order)
 
         if encode_only:
             return hidden

@@ -15,11 +15,12 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+from cad import run_cad
 from lang.utils import to_gpu, Corpus, batchify, train_ngram_lm, get_ppl, create_exp_dir
 from lang.models import Seq2Seq, MLP_D, MLP_G
 
 
-exec(open("run_snli.py").read())
+args = run_cad.load_args()
 
 # Set the random seed manually for reproducibility.
 random.seed(args.seed) 
@@ -106,6 +107,7 @@ def save_model():
         },
         os.path.join(args.save, "model.pt"))
 
+
 def load_models():
     model_args = json.load(open(os.path.join(args.save, 'options.json'), 'r'))
     word2idx = json.load(open(os.path.join(args.save, 'vocab.json'), 'r'))
@@ -117,6 +119,7 @@ def load_models():
     gan_gen.load_state_dict(loaded.get('gan_g'))
     gan_disc.load_state_dict(loaded.get('gan_d'))
     return model_args, idx2word, autoencoder, gan_gen, gan_disc
+
 
 def evaluate_autoencoder(data_source, epoch):
     # Turn on evaluation mode which disables dropout.
@@ -189,7 +192,7 @@ def gen_fixed_noise(noise, to_save):
             f.write(chars + '\n')
 
 
-def train_lm(data_path):
+def train_lm():
     save_path = os.path.join("/tmp", ''.join(random.choice(
             string.ascii_uppercase + string.digits) for _ in range(6)))
 
@@ -438,4 +441,6 @@ def train():
                     logging("Ending training")
                     sys.exit()
 
-train()
+if __name__ == '__main__':
+    train()
+

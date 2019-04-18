@@ -1,0 +1,14 @@
+CUDA_VISIBLE_DEVICES=5 nohup python -m train_ae --data_path data/umn/ data/mimic/ --fields context trunc_context --save save/context_pretrain/ --batch_size 32 --vocab_size 30000 > nohup_context_pretrain.txt &
+28044
+
+
+CUDA_VISIBLE_DEVICES=6 nohup python -m train_ae --data_path data/umn_no_context/ data/umls_no_context/ --fields short long --save save/sf_lf_pretrain/ --token_level char --batch_size 128 > nohup_sf_lf_pretrain.txt &
+
+
+CUDA_VISIBLE_DEVICES=7 nohup python -m train_ae --data_path data/umn/ data/mimic_small/ --fields context trunc_context --save save/context_pretrain_small/ --batch_size 32  --vocab_size 15000 > nohup_context_pretrain_small.txt &
+
+
+
+
+CUDA_VISIBLE_DEVICES=6 nohup python -m train_disc --data_path data/mimic/ --save save/pretrain_disc/ --batch_size 32 --char_ckpt save/sf_lf_pretrain/ckpt_epoch30.pt --word_ckpt save/context_pretrain_small/ckpt_epoch20.pt > nohup_disc_pretrain.txt &
+2732
