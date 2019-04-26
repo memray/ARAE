@@ -338,7 +338,7 @@ def train():
 
             if global_step % args.save_every == 0:
                 save_ckpt(ckpt_name="ckpt_epoch%d" % epoch, save_dir=args.save,
-                          model_dict={"char_ae": char_ae, "word_ae": word_ae, "D": D},
+                          model_dict={"char_ae": char_ae, "word_ae": word_ae, "D": D, "G": G},
                           args=args, vocab=(char_vocab.word2idx, word_vocab.word2idx))
 
             if global_step % args.valid_every == 0:
@@ -355,7 +355,7 @@ def train():
                     logger.info("New saving model: epoch {}, best acc={}.".format(epoch, best_valid_acc))
                     save_ckpt(ckpt_name="ckpt_epoch%d-best@%f" % (epoch, best_valid_acc),
                               save_dir=args.save,
-                              model_dict={"char_ae": char_ae, "word_ae": word_ae, "D": D},
+                              model_dict={"char_ae": char_ae, "word_ae": word_ae, "D": D, "G": G},
                               args=args, vocab=(char_vocab.word2idx, word_vocab.word2idx)
                         )
                 else:
