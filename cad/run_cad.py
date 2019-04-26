@@ -109,7 +109,7 @@ def load_lm_args():
 
 # exec(open("train.py").read())
 
-def load_d_args():
+def load_cadgan_args():
     parser = argparse.ArgumentParser(description='ARAE for CAD')
     parser.add_argument('--data_path', type=str, nargs='+', required=True,
                         help='location of the data corpus')
@@ -163,7 +163,7 @@ def load_d_args():
     parser.add_argument('--patience', type=int, default=2,
                         help="number of language model evaluations without ppl "
                              "improvement to wait before early stopping")
-    parser.add_argument('--batch_size', type=int, default=64, metavar='N',
+    parser.add_argument('--batch_size', type=int, default=128, metavar='N',
                         help='batch size')
     # parser.add_argument('--niters_ae', type=int, default=1,
     #                     help='number of autoencoder iterations in training')
@@ -193,6 +193,10 @@ def load_d_args():
     parser.add_argument('--grad_lambda', type=float, default=0.1,
                         help='WGAN into AE lambda')
 
+    parser.add_argument('--valid_every', type=int, default=2000,
+                        help='number of steps to run validation')
+    parser.add_argument('--save_every', type=int, default=5000,
+                        help='number of steps to save ckpt')
     # Evaluation Arguments
     parser.add_argument('--sample', action='store_true',
                         help='sample when decoding for generation')
@@ -206,7 +210,6 @@ def load_d_args():
                         help='random seed')
 
     args = parser.parse_args()
-    print(vars(args))
 
     return args
 

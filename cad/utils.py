@@ -1,4 +1,5 @@
 import os
+import pickle
 import string
 
 import torch
@@ -7,6 +8,26 @@ import random
 import shutil
 import json
 import math
+import logging
+
+
+def init_logger(log_file=None, log_file_level=logging.INFO):
+    log_format = logging.Formatter("[%(asctime)s %(levelname)s] %(message)s")
+    logger = logging.getLogger()
+    logger.setLevel(logging.DEBUG)
+
+    file_handler = logging.FileHandler(log_file)
+    file_handler.setFormatter(log_format)
+    logger.addHandler(file_handler)
+
+    console_handler = logging.StreamHandler()
+    console_handler.setFormatter(log_format)
+    logger.addHandler(console_handler)
+
+    logger.info("Redirect logging to file %s" % os.path.abspath(log_file))
+
+    return logger
+
 
 def load_kenlm():
     global kenlm
@@ -244,25 +265,47 @@ class CADCorpus(object):
 
         self.train = []
         self.test = []
+
         for path in paths:
             self.train_path = os.path.join(path, 'train.txt')
             self.test_path = os.path.join(path, 'test.txt')
 
             if os.path.exists(self.train_path):
-                short_forms = self.tokenize(self.train_path, fields=['short'], token_level='char')
-                long_forms = self.tokenize(self.train_path, fields=['long'], token_level='char')
-                contexts = self.tokenize(self.train_path, fields=['trunc_context'], token_level='word')
-                self.train.extend(list(zip(short_forms, long_forms, contexts)))
+                train_cache_path = os.path.join(path, 'train.vec')
+
+                if not os.path.exists(train_cache_path):
+                    print("Loading train")
+                    short_forms = self.tokenize(self.train_path, fields=['short'], token_level='char')
+                    long_forms = self.tokenize(self.train_path, fields=['long'], token_level='char')
+                    contexts = self.tokenize(self.train_path, fields=['trunc_context'], token_level='word')
+                    print("Vectorizing train")
+                    tmp_train = zip(short_forms, long_forms, contexts)
+                    vec_train = self.vectorize(tmp_train, char_vocab, word_vocab)
+                    print("Dumping train")
+                    pickle.dump(vec_train, open(train_cache_path, 'wb'))
+                else:
+                    vec_train = pickle.load(open(train_cache_path, 'rb'))
+
+                self.train.extend(vec_train)
+
             if os.path.exists(self.test_path):
-                short_forms = self.tokenize(self.test_path, fields=['short'], token_level='char')
-                long_forms = self.tokenize(self.test_path, fields=['long'], token_level='char')
-                contexts = self.tokenize(self.test_path, fields=['trunc_context'], token_level='word')
-                self.test.extend(list(zip(short_forms, long_forms, contexts)))
+                test_cache_path = os.path.join(path, 'test.vec')
 
-        self.train = self.vectorize(self.train, char_vocab, word_vocab)
-        self.test = self.vectorize(self.test, char_vocab, word_vocab)
+                if not os.path.exists(test_cache_path):
+                    short_forms = self.tokenize(self.test_path, fields=['short'], token_level='char')
+                    long_forms = self.tokenize(self.test_path, fields=['long'], token_level='char')
+                    contexts = self.tokenize(self.test_path, fields=['trunc_context'], token_level='word')
+                    tmp_test = list(zip(short_forms, long_forms, contexts))
+                    vec_test = self.vectorize(tmp_test, char_vocab, word_vocab)
+                    pickle.dump(vec_test, open(test_cache_path, 'wb'))
+                else:
+                    vec_test = pickle.load(open(test_cache_path, 'rb'))
 
-        print('#(examples): train %d, test %d' % (len(self.train), len(self.test)))
+                self.test.extend(vec_test)
+
+            print('#(%s examples): train %d, test %d' % (path, len(vec_train), len(vec_test)))
+
+        print('#(total examples): train %d, test %d' % (len(self.train), len(self.test)))
 
 
     def tokenize(self, path, fields, token_level):
@@ -437,9 +480,9 @@ def get_ppl(lm, sentences):
 def create_exp_dir(path, scripts_to_save=None, dict=None, options=None):
     if not os.path.exists(path):
         os.makedirs(path)
-    else:
-        shutil.rmtree(path)
-        os.makedirs(path)
+    # else:
+        # shutil.rmtree(path)
+        # os.makedirs(path)
 
     print('Experiment dir : {}'.format(path))
     if scripts_to_save is not None:

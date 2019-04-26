@@ -1,0 +1,443 @@
+{
+    "AB": [
+        "abortion",
+        "ankle-brachial",
+        "blood group in ABO system",
+        "type A, type B",
+        "X-ray finding",
+        "antipyrine benzocaine",
+        "arterial blood"
+    ],
+    "VBG": [
+        "vertical banded gastroplasty",
+        "venous blood gas"
+    ],
+    "AC": [
+        "(drug) AC",
+        "acromioclavicular",
+        "adriamycin cyclophosphamide",
+        "assist control",
+        "before meals",
+        "acetate",
+        "abdominal circumference",
+        "alternating current",
+        "anticoagulation",
+        "antecubital"
+    ],
+    "ALD": [
+        "ad lib on demand",
+        "adrenoleukodystrophy",
+        "acetyl lysergic acid diethylamide"
+    ],
+    "AMA": [
+        "against medical advice",
+        "antimitochondrial antibody",
+        "advanced maternal age"
+    ],
+    "ASA": [
+        "acetylsalicylic acid",
+        "American Society of Anesthesiologists",
+        "aminosalicylic acid"
+    ],
+    "AVR": [
+        "aortic valve replacement",
+        "augmented voltage right arm",
+        "aortic valve resistance",
+        "aortic valve regurgitation"
+    ],
+    "AV": [
+        "atrioventricular",
+        "arteriovenous",
+        "aortic valve"
+    ],
+    "BAL": [
+        "blood alcohol level",
+        "bronchoalveolar lavage"
+    ],
+    "BK": [
+        "BK (virus)",
+        "below knee"
+    ],
+    "BMP": [
+        "basic metabolic profile",
+        "bone morphogenetic protein"
+    ],
+    "BM": [
+        "bowel movement",
+        "breast milk",
+        "bone marrow"
+    ],
+    "C&S": [
+        "culture and sensitivity",
+        "conjunctivae and sclerae",
+        "protein C and protein S"
+    ],
+    "C3": [
+        "cervical (level) 3",
+        "(complement) component 3",
+        "(stage) C3",
+        "propionylcarnitine"
+    ],
+    "C4": [
+        "cervical (level) 4",
+        "(complement) component 4",
+        "(PO Box) C4"
+    ],
+    "CA": [
+        "cancer",
+        "carbohydrate antigen",
+        "California"
+    ],
+    "CDI": [
+        "center for diagnostic imaging",
+        "clean, dry, intact",
+        "Children's Depression Inventory"
+    ],
+    "CEA": [
+        "carcinoembryonic antigen",
+        "carotid endarterectomy"
+    ],
+    "CR": [
+        "controlled release",
+        "cardiorespiratory",
+        "complete remission",
+        "C-reactive",
+        "creatinine",
+        "closed reduction"
+    ],
+    "CTA": [
+        "computed tomographic angiography",
+        "clear to auscultation"
+    ],
+    "CVA": [
+        "costovertebral angle",
+        "cerebrovascular accident"
+    ],
+    "CVP": [
+        "cyclophosphamide, vincristine, prednisone",
+        "central venous pressure",
+        "cardiovascular pulmonary"
+    ],
+    "CVS": [
+        "cardiovascular system",
+        "chorionic villus sampling",
+        "customer, value, service"
+    ],
+    "DC": [
+        "direct current",
+        "discharge",
+        "discontinue",
+        "District of Columbia",
+        "(diltiazem) DC",
+        "direct and consensual",
+        "(drug) DC"
+    ],
+    "DIP": [
+        "distal interphalangeal",
+        "desquamative interstitial pneumonia",
+        "dipropionate"
+    ],
+    "DM": [
+        "dextromethorphan",
+        "diabetes mellitus"
+    ],
+    "DT": [
+        "diphtheria-tetanus",
+        "delirium tremens",
+        "(drug) DT"
+    ],
+    "EC": [
+        "enteric-coated",
+        "enterocutaneous",
+        "epirubicin",
+        "extensor carpi"
+    ],
+    "ER": [
+        "extended release",
+        "emergency room",
+        "estrogen receptor"
+    ],
+    "ES": [
+        "(drug) ES",
+        "extra strength",
+        "enhanced sensitivity"
+    ],
+    "ET": [
+        "enterostomal therapy",
+        "endotracheal",
+        "elective termination"
+    ],
+    "FISH": [
+        "fluorescent in situ hybridization"
+    ],
+    "FSH": [
+        "Fairview Southdale Hospital",
+        "follicle-stimulating hormone",
+        "fascioscapulohumeral muscular dystrophy"
+    ],
+    "GT": [
+        "gastrostomy tube",
+        "glutamyl transpeptidase",
+        "gutta",
+        "glucose tolerance"
+    ],
+    "IA": [
+        "intraarterial",
+        "(stage) IA",
+        "Iowa",
+        "(grade) IA",
+        "(type) IA",
+        "(status) IA",
+        "(class) IA"
+    ],
+    "IB": [
+        "(stage) IB",
+        "interferon beta",
+        "(cycle) IB",
+        "(grade) IB",
+        "(status) IB",
+        "(type) IB",
+        "international baccalaureate"
+    ],
+    "IM": [
+        "intramuscular",
+        "intramedullary"
+    ],
+    "IR": [
+        "interventional radiology",
+        "immediate-release",
+        "internal rotation",
+        "infrared"
+    ],
+    "ITP": [
+        "idiopathic thrombocytopenic purpura"
+    ],
+    "IT": [
+        "information technology",
+        "intertrochanteric",
+        "intrathecal",
+        "ischial tuberosity",
+        "(drug) IT",
+        "iliotibial",
+        "pravastatin or atorvastatin evaluation and infection therapy",
+        "inspiratory time",
+        "immature-to-total neutrophil"
+    ],
+    "IVF": [
+        "intravenous fluid",
+        "in vitro fertilization"
+    ],
+    "LA": [
+        "long-acting",
+        "Los Angeles",
+        "left atrial",
+        "Louisiana"
+    ],
+    "LE": [
+        "leukocyte esterase",
+        "lower extremity",
+        "lupus erythematosus",
+        "lymphedema",
+        "sinemet-levodopa"
+    ],
+    "MOM": [
+        "milk of magnesia",
+        "multiples of median"
+    ],
+    "MP": [
+        "mercaptopurine",
+        "(device) MP",
+        "metatarsophalangeal/metacarpophalangeal",
+        "metacarpophalangeal",
+        "metatarsophalangeal",
+        "metabolic panel",
+        "metarsophalangeal",
+        "menstrual period",
+        "military police",
+        "(drug) MP",
+        "mesangial proliferative"
+    ],
+    "MR": [
+        "magnetic resonance",
+        "mitral regurgitation",
+        "medical record",
+        "mental retardation"
+    ],
+    "MSSA": [
+        "modified selective severity assessment",
+        "methicillin-susceptible Staphylococcus aureus"
+    ],
+    "MS": [
+        "multiple sclerosis",
+        "morphine sulfate",
+        "musculoskeletal",
+        "medical student",
+        "master of science",
+        "(drug) MS",
+        "mitral stenosis"
+    ],
+    "NAD": [
+        "nothing abnormal detected",
+        "no acute distress"
+    ],
+    "NA": [
+        "Narcotics Anonymous",
+        "sodium",
+        "not applicable",
+        "nurse anesthetist"
+    ],
+    "NP": [
+        "nasopharyngeal",
+        "nurse practitioner",
+        "natriuretic peptide",
+        "nasopharynx",
+        "(drug) NP"
+    ],
+    "OP": [
+        "oblique presentation/occiput posterior",
+        "oropharynx",
+        "operative",
+        "occiput posterior",
+        "ophthalmic",
+        "ova and parasites",
+        "outpatient"
+    ],
+    "OR": [
+        "operating room",
+        "(drug) OR"
+    ],
+    "OTC": [
+        "over the counter",
+        "ornithine transcarbamoylase"
+    ],
+    "PAC": [
+        "physician assistant certification",
+        "premature atrial contraction",
+        "post anesthesia care",
+        "picture archiving communication",
+        "(drug) PAC",
+        "pulmonary arterial concentration",
+        "pulmonary artery catheter"
+    ],
+    "PA": [
+        "posterior-anterior",
+        "physician assistant",
+        "pulmonary artery",
+        "physician associates",
+        "pulmonary auscultation"
+    ],
+    "PCP": [
+        "primary care physician",
+        "phencyclidine",
+        "Pneumocystis jiroveci pneumonia"
+    ],
+    "PDA": [
+        "patent ductus arteriosus",
+        "posterior descending artery"
+    ],
+    "PD": [
+        "peritoneal dialysis",
+        "police department",
+        "pancreatic duct",
+        "posterior descending",
+        "patent ductus",
+        "phosphate dehydrogenase",
+        "(device) PD",
+        "(drug) PD",
+        "Parkinson disease",
+        "personality disorder",
+        "prism diopter"
+    ],
+    "PE": [
+        "pulmonary embolus",
+        "pressure equalization",
+        "pleural effusion"
+    ],
+    "PM": [
+        "afternoon"
+    ],
+    "PR": [
+        "pulmonary regurgitation",
+        "per rectum",
+        "progesterone receptor",
+        "pr interval",
+        "(drug) PR",
+        "pulse rate"
+    ],
+    "PT": [
+        "physical therapy",
+        "prothrombin time",
+        "prothrombin",
+        "posterior tibial"
+    ],
+    "RA": [
+        "room air",
+        "right atrium",
+        "rheumatoid arthritis",
+        "retinoic acid"
+    ],
+    "RT": [
+        "respiratory therapy",
+        "radiation therapy",
+        "retrograde tachycardia",
+        "respiratory therapist",
+        "right",
+        "(drug) RT"
+    ],
+    "SA": [
+        "slow acting/sustained action",
+        "sinuatrial",
+        "sinus arrest",
+        "saturation"
+    ],
+    "SBP": [
+        "systolic blood pressure",
+        "spontaneous bacterial peritonitis"
+    ],
+    "SMA": [
+        "superior mesenteric artery",
+        "smooth muscle actin",
+        "sequential multiple autoanalyzer",
+        "spinal muscular atrophy",
+        "smooth muscle antibody"
+    ],
+    "SS": [
+        "single strength",
+        "sickle cell genotype SS"
+    ],
+    "T1": [
+        "tumor stage 1",
+        "thoracic (level) 1",
+        "T1 (MRI)",
+        "term 1",
+        "type 1 (diabetes mellitus)"
+    ],
+    "T2": [
+        "tumor stage 2",
+        "T2 (MRI)",
+        "thoracic (level) 2",
+        "term 2",
+        "T2 Nodes"
+    ],
+    "T3": [
+        "thoracic (level) 3",
+        "triiodothyronine",
+        "tumor stage 3",
+        "term 3",
+        "T3 (ECG pattern)"
+    ],
+    "T4": [
+        "thoracic (level) 4",
+        "thyroxine",
+        "tumor stage 4"
+    ],
+    "US": [
+        "United States",
+        "ultrasound"
+    ],
+    "VAD": [
+        "vincristine adriamycin and dexamethasone",
+        "ventricular assist device",
+        "vascular access device"
+    ]
+}

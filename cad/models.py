@@ -9,116 +9,109 @@ import json
 import os
 import numpy as np
 
+def build_MLP(model, layer_name, layer_sizes, activation):
+    setattr(model, layer_name, [])
+    layers = getattr(model, layer_name)
+
+    for i in range(len(layer_sizes) - 1):
+        layer = nn.Linear(layer_sizes[i], layer_sizes[i + 1])
+        layers.append(layer)
+        model.add_module(layer_name+"-linear-"+str(i+1), layer)
+
+        # add batch normalization after first layer (wgan-gp disables use of BN layer, but stablize our training greatly)
+        if i != 0:
+            bn = nn.BatchNorm1d(layer_sizes[i + 1], eps=1e-05, momentum=0.1)
+            layers.append(bn)
+            model.add_module(layer_name+"-bn-" + str(i + 1), bn)
+
+        layers.append(activation)
+        model.add_module(layer_name+"-activ-" + str(i + 1), activation)
+
 
 class MLP_D(nn.Module):
-    def __init__(self, ninput, noutput, layers,
-                 activation=nn.LeakyReLU(0.2)):
+    def __init__(self, input_dim, output_dim, arch_layers, activation=nn.LeakyReLU(0.2)):
         super(MLP_D, self).__init__()
-        self.ninput = ninput
-        self.noutput = noutput
+        self.input_dim = input_dim
+        self.output_dim = output_dim
+
+        # shortform/longform/context layers
+        layer_sizes = [input_dim] + [int(x) for x in arch_layers.split('-')]
+        build_MLP(self, "shortform_layer", layer_sizes, activation)
+        build_MLP(self, "longform_layer", layer_sizes, activation)
+        build_MLP(self, "context_layer", layer_sizes, activation)
 
         # main network
-        layer_sizes = [ninput * 2] + [int(x) for x in layers.split('-')]
-        self.layers = []
-        for i in range(len(layer_sizes)-1):
-            layer = nn.Linear(layer_sizes[i], layer_sizes[i+1])
-            self.layers.append(layer)
-            self.add_module("layer"+str(i+1), layer)
+        layer_sizes = [input_dim * 2] + [int(x) for x in arch_layers.split('-')]
+        build_MLP(self, "merge_layer", layer_sizes, activation)
 
-            # No batch normalization after first layer
-            if i != 0:
-                bn = nn.BatchNorm1d(layer_sizes[i+1], eps=1e-05, momentum=0.1)
-                self.layers.append(bn)
-                self.add_module("bn"+str(i+1), bn)
-
-            self.layers.append(activation)
-            self.add_module("activation"+str(i+1), activation)
-
-        # output layer
-        layer = nn.Linear(layer_sizes[-1], noutput)
-        self.layers.append(layer)
-        self.add_module("layer"+str(len(self.layers)), layer)
-
-        # projection layers for context
-        layer_sizes = [ninput] + [int(x) for x in layers.split('-')]
-        self.proj_layers = []
-        for i in range(len(layer_sizes)-1):
-            layer = nn.Linear(layer_sizes[i], layer_sizes[i+1])
-            self.proj_layers.append(layer)
-            self.add_module("context-proj-layer"+str(i+1), layer)
-
-            # No batch normalization after first layer
-            if i != 0:
-                bn = nn.BatchNorm1d(layer_sizes[i+1], eps=1e-05, momentum=0.1)
-                self.proj_layers.append(bn)
-                self.add_module("context-proj-bn"+str(i+1), bn)
-
-            self.proj_layers.append(activation)
-            self.add_module("context-proj-activation"+str(i+1), activation)
+        # a linear output layer
+        layer = nn.Linear(layer_sizes[-1], output_dim)
+        self.merge_layer.append(layer)
+        self.add_module("output_layer", layer)
 
         self.init_weights()
 
-    def forward(self, sf, lf, con):
-        for i, layer in enumerate(self.proj_layers):
-            con = layer(con)
+    def forward(self, sf, lf, cont):
+        for i, layer in enumerate(self.shortform_layer):
+            sf = layer(sf)
+        for i, layer in enumerate(self.longform_layer):
+            lf = layer(lf)
+        for i, layer in enumerate(self.context_layer):
+            cont = layer(cont)
 
-        x = torch.cat([sf + con, lf], dim=1)
-        for i, layer in enumerate(self.layers):
+        x = torch.cat([sf + cont, lf], dim=1)
+        for i, layer in enumerate(self.merge_layer):
             x = layer(x)
 
         return x
 
     def init_weights(self):
         init_std = 0.02
-        for layer in self.layers:
-            try:
+        for layer in self.shortform_layer + self.longform_layer + self.context_layer + self.merge_layer:
+            if hasattr(layer, 'weight'):
                 layer.weight.data.normal_(0, init_std)
+            if hasattr(layer, 'bias'):
                 layer.bias.data.fill_(0)
-            except:
-                pass
 
 
 class MLP_G(nn.Module):
-    def __init__(self, ninput, noutput, layers,
-                 activation=nn.ReLU(), gpu=True):
+    def __init__(self, input_dim, output_dim, noise_dim, arch_layers, activation=nn.ReLU()):
         super(MLP_G, self).__init__()
-        self.ninput = ninput
-        self.noutput = noutput
+        self.input_dim = input_dim
+        self.output_dim = output_dim
 
-        layer_sizes = [ninput] + [int(x) for x in layers.split('-')]
-        self.layers = []
+        layer_sizes = [input_dim] + [int(x) for x in arch_layers.split('-')]
+        build_MLP(self, "shortform_layer", layer_sizes, activation)
+        build_MLP(self, "context_layer", layer_sizes, activation)
 
-        for i in range(len(layer_sizes)-1):
-            layer = nn.Linear(layer_sizes[i], layer_sizes[i+1])
-            self.layers.append(layer)
-            self.add_module("layer"+str(i+1), layer)
+        layer_sizes = [input_dim + noise_dim] + [int(x) for x in arch_layers.split('-')]
+        build_MLP(self, "merge_layer", layer_sizes, activation)
 
-            bn = nn.BatchNorm1d(layer_sizes[i+1], eps=1e-05, momentum=0.1)
-            self.layers.append(bn)
-            self.add_module("bn"+str(i+1), bn)
-
-            self.layers.append(activation)
-            self.add_module("activation"+str(i+1), activation)
-
-        layer = nn.Linear(layer_sizes[-1], noutput)
-        self.layers.append(layer)
-        self.add_module("layer"+str(len(self.layers)), layer)
+        layer = nn.Linear(layer_sizes[-1], output_dim)
+        self.merge_layer.append(layer)
+        self.add_module("output_layer", layer)
 
         self.init_weights()
 
-    def forward(self, x):
-        for i, layer in enumerate(self.layers):
+    def forward(self, noise_z, sf, cont):
+        for i, layer in enumerate(self.shortform_layer):
+            sf = layer(sf)
+        for i, layer in enumerate(self.context_layer):
+            cont = layer(cont)
+
+        x = torch.cat([sf + cont, noise_z], dim=1)
+        for i, layer in enumerate(self.merge_layer):
             x = layer(x)
+
         return x
 
     def init_weights(self):
         init_std = 0.02
-        for layer in self.layers:
-            try:
+        for layer in self.shortform_layer+self.context_layer+self.merge_layer:
+            if hasattr(layer, 'weight'):
                 layer.weight.data.normal_(0, init_std)
+            if hasattr(layer, 'bias'):
                 layer.bias.data.fill_(0)
-            except:
-                pass
 
 
 class Seq2Seq(nn.Module):

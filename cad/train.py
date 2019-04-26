@@ -15,12 +15,13 @@ import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-from cad import run_cad
-from lang.utils import to_gpu, Corpus, batchify, train_ngram_lm, get_ppl, create_exp_dir
-from lang.models import Seq2Seq, MLP_D, MLP_G
+import run_cad
+from utils import *
+from models import Seq2Seq, MLP_D, MLP_G
 
+from regularizer import calc_gradient_penalty
 
-args = run_cad.load_args()
+args = run_cad.load_cadgan_args()
 
 # Set the random seed manually for reproducibility.
 random.seed(args.seed) 
@@ -31,52 +32,67 @@ torch.cuda.manual_seed(args.seed)
 ###############################################################################
 # Load data
 ###############################################################################
+# load pretraiend models and vocabs
+char_ae_params, char_word2idx, char_args = load_ckpt(args.char_ckpt)
+word_ae_params, word_word2idx, word_args = load_ckpt(args.word_ckpt)
+
 # create corpus
-corpus = Corpus(args.data_path,
-                maxlen=args.maxlen,
-                vocab_size=args.vocab_size,
-                lowercase=args.lowercase)
+char_vocab = Dictionary()
+char_vocab.load_from_word2idx(char_word2idx)
+word_vocab = Dictionary()
+word_vocab.load_from_word2idx(word_word2idx)
+
+corpus = CADCorpus(args.data_path,
+                   maxlen=args.maxlen,
+                   char_vocab=char_vocab,
+                   word_vocab=word_vocab,
+                   lowercase=args.lowercase,
+                   )
 
 # save arguments
-ntokens = len(corpus.dictionary.word2idx)
-print("Vocabulary Size: {}".format(ntokens))
-args.ntokens = ntokens
+logger = init_logger(os.path.join(args.save, "log.txt"))
+logger.info(vars(args))
+logger.info("Vocabulary Size: char vocab={}, word vocab={}".format(len(char_word2idx), len(word_word2idx)))
 
 # exp dir
 create_exp_dir(os.path.join(args.save), ['train.py', 'models.py', 'utils.py'],
-        dict=corpus.dictionary.word2idx, options=args)
+        dict=(char_word2idx, word_word2idx), options=args)
 
-def logging(str, to_stdout=True):
-    with open(os.path.join(args.save, 'log.txt'), 'a') as f:
-        f.write(str + '\n')
-    if to_stdout:
-        print(str)
-logging(str(vars(args)))
-
-eval_batch_size = 10
-test_data = batchify(corpus.test, eval_batch_size, shuffle=False)
-train_data = batchify(corpus.train, args.batch_size, shuffle=True)
-
-print("Loaded data!")
+logger.info(str(vars(args)))
 
 ###############################################################################
 # Build the models
 ###############################################################################
-autoencoder = Seq2Seq(emsize=args.emsize,
-                      nhidden=args.nhidden,
-                      ntokens=args.ntokens,
-                      nlayers=args.nlayers,
-                      noise_r=args.noise_r,
-                      hidden_init=args.hidden_init,
-                      dropout=args.dropout)
-gan_gen = MLP_G(ninput=args.z_size, noutput=args.nhidden, layers=args.arch_g)
-gan_disc = MLP_D(ninput=args.nhidden, noutput=1, layers=args.arch_d)
+char_ae = Seq2Seq(emsize=char_args.emsize,
+                nhidden=char_args.nhidden,
+                ntokens=char_args.ntokens,
+                nlayers=char_args.nlayers,
+                noise_r=char_args.noise_r,
+                hidden_init=char_args.hidden_init,
+                dropout=char_args.dropout)
 
-print(autoencoder)
+char_ae.load_state_dict(char_ae_params)
+
+word_ae = Seq2Seq(emsize=word_args.emsize,
+                nhidden=word_args.nhidden,
+                ntokens=word_args.ntokens,
+                nlayers=word_args.nlayers,
+                noise_r=word_args.noise_r,
+                hidden_init=word_args.hidden_init,
+                dropout=word_args.dropout)
+
+word_ae.load_state_dict(word_ae_params)
+
+
+gan_gen = MLP_G(input_dim=args.z_size, output_dim=args.nhidden, arch_layers=args.arch_g)
+gan_disc = MLP_D(input_dim=args.nhidden, output_dim=1, arch_layers=args.arch_d)
+
+print(char_ae)
+print(word_ae)
 print(gan_gen)
 print(gan_disc)
 
-optimizer_ae = optim.SGD(autoencoder.parameters(), lr=args.lr_ae)
+optimizer_ae = optim.SGD(char_ae.parameters() + word_ae.parameters(), lr=args.lr_ae)
 optimizer_gan_g = optim.Adam(gan_gen.parameters(),
                              lr=args.lr_gan_g,
                              betas=(args.beta1, 0.999))
@@ -85,43 +101,17 @@ optimizer_gan_d = optim.Adam(gan_disc.parameters(),
                              betas=(args.beta1, 0.999))
 
 if torch.cuda.is_available():
-    autoencoder = autoencoder.cuda()
+    char_ae = char_ae.cuda()
+    word_ae = word_ae.cuda()
     gan_gen = gan_gen.cuda()
     gan_disc = gan_disc.cuda()
-    one = torch.Tensor(1).fill_(1).cuda()
-else:
-    one = torch.Tensor(1).fill_(1)
 
-# global vars
-mone = one * -1
 
 ###############################################################################
 # Training code
 ###############################################################################
-def save_model():
-    print("Saving models to {}".format(args.save))
-    torch.save({
-        "ae": autoencoder.state_dict(),
-        "gan_g": gan_gen.state_dict(),
-        "gan_d": gan_disc.state_dict()
-        },
-        os.path.join(args.save, "model.pt"))
 
-
-def load_models():
-    model_args = json.load(open(os.path.join(args.save, 'options.json'), 'r'))
-    word2idx = json.load(open(os.path.join(args.save, 'vocab.json'), 'r'))
-    idx2word = {v: k for k, v in word2idx.items()}
-
-    print('Loading models from {}'.format(args.save))
-    loaded = torch.load(os.path.join(args.save, "model.pt"))
-    autoencoder.load_state_dict(loaded.get('ae'))
-    gan_gen.load_state_dict(loaded.get('gan_g'))
-    gan_disc.load_state_dict(loaded.get('gan_d'))
-    return model_args, idx2word, autoencoder, gan_gen, gan_disc
-
-
-def evaluate_autoencoder(data_source, epoch):
+def evaluate_autoencoder(autoencoder, data_source, epoch):
     # Turn on evaluation mode which disables dropout.
     autoencoder.eval()
     total_loss = 0
@@ -273,7 +263,7 @@ def train_ae(epoch, batch, total_loss_ae, start_time, i):
         accuracy = torch.mean(max_indices.eq(masked_target).float()).data.item()
         cur_loss = total_loss_ae / args.log_interval
         elapsed = time.time() - start_time
-        logging('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
+        logger.info('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
                 'loss {:5.2f} | ppl {:8.2f} | acc {:8.2f}'.format(
                 epoch, i, len(train_data),
                 elapsed * 1000 / args.log_interval,
@@ -300,25 +290,6 @@ def grad_hook(grad):
     #gan_norm = torch.norm(grad, p=2, dim=1).detach().data.mean()
     #print(gan_norm, autoencoder.grad_norm)
     return grad * args.grad_lambda
-
-
-''' Steal from https://github.com/caogang/wgan-gp/blob/master/gan_cifar10.py '''
-def calc_gradient_penalty(netD, real_data, fake_data):
-    bsz = real_data.size(0)
-    alpha = torch.rand(bsz, 1)
-    alpha = alpha.expand(bsz, real_data.size(1))  # only works for 2D XXX
-    alpha = alpha.cuda()
-    interpolates = alpha * real_data + ((1 - alpha) * fake_data)
-    interpolates = Variable(interpolates, requires_grad=True)
-    disc_interpolates = netD(interpolates)
-
-    gradients = torch.autograd.grad(outputs=disc_interpolates, inputs=interpolates,
-                                    grad_outputs=torch.ones(disc_interpolates.size()).cuda(),
-                                    create_graph=True, retain_graph=True, only_inputs=True)[0]
-    gradients = gradients.view(gradients.size(0), -1)
-
-    gradient_penalty = ((gradients.norm(2, dim=1) - 1) ** 2).mean() * args.gan_gp_lambda
-    return gradient_penalty
 
 
 def train_gan_d(batch):
@@ -365,9 +336,7 @@ def train_gan_d_into_ae(batch):
 
 
 def train():
-    logging("Training")
-    train_data = batchify(corpus.train, args.batch_size, shuffle=True)
-
+    logger.info("Training")
     # gan: preparation
     if args.niters_gan_schedule != "":
         gan_schedule = [int(x) for x in args.niters_gan_schedule.split("-")]
@@ -379,10 +348,16 @@ def train():
     best_rev_ppl = None
     impatience = 0
     for epoch in range(1, args.epochs+1):
+        train_data = corpus.batchify(corpus.train, args.batch_size, shuffle=True)
+        train_data = corpus.add_fake_labels(train_data, field="long")
+
+        test_data = corpus.batchify(corpus.test, args.batch_size, shuffle=False)
+        test_data = corpus.add_fake_labels(test_data, field="long")
+
         # update gan training schedule
         if epoch in gan_schedule:
             niter_gan += 1
-            logging("GAN training loop schedule: {}".format(niter_gan))
+            logger.info("GAN training loop schedule: {}".format(niter_gan))
 
         total_loss_ae = 0
         epoch_start_time = time.time()
@@ -411,14 +386,14 @@ def train():
             niter_g += 1
             if niter_g % 100 == 0:
                 autoencoder.noise_anneal(args.noise_anneal)
-                logging('[{}/{}][{}/{}] Loss_D: {:.8f} (Loss_D_real: {:.8f} '
+                logger.info('[{}/{}][{}/{}] Loss_D: {:.8f} (Loss_D_real: {:.8f} '
                         'Loss_D_fake: {:.8f}) Loss_G: {:.8f}'.format(
                          epoch, args.epochs, niter, len(train_data),
                          errD.data.item(), errD_real.data.item(),
                          errD_fake.data.item(), errG.data.item()))
         # eval
         test_loss, accuracy = evaluate_autoencoder(test_data, epoch)
-        logging('| end of epoch {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
+        logger.info('| end of epoch {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
                 'test ppl {:5.2f} | acc {:3.3f}'.format(epoch,
                 (time.time() - epoch_start_time), test_loss,
                 math.exp(test_loss), accuracy))
@@ -427,18 +402,18 @@ def train():
 
         # eval with rev_ppl and for_ppl
         rev_ppl, for_ppl = train_lm(args.data_path)
-        logging("Epoch {:03d}, Reverse perplexity {}".format(epoch, rev_ppl))
-        logging("Epoch {:03d}, Forward perplexity {}".format(epoch, for_ppl))
+        logger.info("Epoch {:03d}, Reverse perplexity {}".format(epoch, rev_ppl))
+        logger.info("Epoch {:03d}, Forward perplexity {}".format(epoch, for_ppl))
         if best_rev_ppl is None or rev_ppl < best_rev_ppl:
             impatience = 0
             best_rev_ppl = rev_ppl
-            logging("New saving model: epoch {:03d}.".format(epoch))
+            logger.info("New saving model: epoch {:03d}.".format(epoch))
             save_model()
         else:
             if not args.no_earlystopping and epoch >= args.min_epochs:
                 impatience += 1
                 if impatience > args.patience:
-                    logging("Ending training")
+                    logger.info("Ending training")
                     sys.exit()
 
 if __name__ == '__main__':

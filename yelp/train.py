@@ -195,8 +195,8 @@ autoencoder = Seq2Seq2Decoder(emsize=args.emsize,
                       dropout=args.dropout,
                       gpu=args.cuda)
 
-gan_gen = MLP_G(ninput=args.z_size, noutput=args.nhidden, layers=args.arch_g)
-gan_disc = MLP_D(ninput=args.nhidden, noutput=1, layers=args.arch_d)
+gan_gen = MLP_G(input_dim=args.z_size, output_dim=args.nhidden, arch_layers=args.arch_g)
+gan_disc = MLP_D(input_dim=args.nhidden, output_dim=1, arch_layers=args.arch_d)
 classifier = MLP_Classify(ninput=args.nhidden, noutput=1, layers=args.arch_classify)
 g_factor = None
 

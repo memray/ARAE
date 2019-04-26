@@ -19,7 +19,7 @@ import run_cad
 from utils import *
 from models import Seq2Seq, MLP_D, MLP_G
 
-from cad.regularizer import score_penalty, gradient_penalty
+from regularizer import score_penalty, gradient_penalty
 
 class EnergyLoss(torch.nn.Module):
 
@@ -54,7 +54,8 @@ class EnergyLoss(torch.nn.Module):
         return loss_total
 
 
-args = run_cad.load_d_args()
+args = run_cad.load_cadgan_args()
+logger = init_logger(os.path.join(args.save, "exp_log.txt"))
 
 # Set the random seed manually for reproducibility.
 random.seed(args.seed) 
@@ -83,11 +84,13 @@ corpus = CADCorpus(args.data_path,
                    )
 
 # save arguments
-logger = init_logger(os.path.join(args.save, "log.txt"))
+if not os.path.exists(args.save):
+    os.makedirs(args.save)
+
 logger.info("Vocabulary Size: char vocab={}, word vocab={}".format(len(char_word2idx), len(word_word2idx)))
 
 # exp dir
-create_exp_dir(os.path.join(args.save), ['train_disc.py', 'models.py', 'utils.py'],
+create_exp_dir(os.path.join(args.save), ['train_cadgan.py', 'models.py', 'utils.py'],
         dict=(char_word2idx, word_word2idx), options=args)
 
 logger.info(str(vars(args)))
@@ -116,35 +119,39 @@ word_ae = Seq2Seq(emsize=word_args.emsize,
                 dropout=word_args.dropout)
 
 word_ae.load_state_dict(word_ae_params)
+
+D = MLP_D(input_dim=args.nhidden, output_dim=1, arch_layers=args.arch_d)
+G = MLP_G(input_dim=args.nhidden, output_dim=args.nhidden, noise_dim=args.z_size, arch_layers=args.arch_g)
 if args.finetune_ae:
     logger.info("AE will be fine-tuned")
-    optimizer_ae = optim.SGD(char_ae.parameters() + word_ae.parameters(),
-                             lr=args.lr_ae)
+    optimizer_D = optim.Adam(list(D.parameters()) + list(char_ae.parameters()) + list(word_ae.parameters()),
+                             lr=args.lr_gan_d,
+                             betas=(args.beta1, 0.999))
+    optimizer_G = optim.Adam(list(G.parameters()) + list(char_ae.parameters()) + list(word_ae.parameters()),
+                             lr=args.lr_gan_g,
+                             betas=(args.beta1, 0.999))
 else:
     logger.info("AE will not be fine-tuned")
+    optimizer_D = optim.Adam(D.parameters(),
+                             lr=args.lr_gan_d,
+                             betas=(args.beta1, 0.999))
+    optimizer_G = optim.Adam(G.parameters(),
+                             lr=args.lr_gan_g,
+                             betas=(args.beta1, 0.999))
 
 logger.info(char_ae)
 logger.info(word_ae)
-
-gan_disc = MLP_D(input_dim=args.nhidden, output_dim=1, arch_layers=args.arch_d)
-optimizer_gan_d = optim.Adam(gan_disc.parameters(),
-                             lr=args.lr_gan_d,
-                             betas=(args.beta1, 0.999))
-logger.info(gan_disc)
-
-criterion = EnergyLoss()
-
-# global vars
-one = torch.Tensor(1).fill_(1)
-mone = one * -1
+logger.info(D)
+logger.info(G)
 
 if torch.cuda.is_available():
+    logger.info("Running on GPU")
     char_ae = char_ae.cuda()
     word_ae = word_ae.cuda()
-    gan_disc = gan_disc.cuda()
-    one = one.cuda()
-    mone = mone.cuda()
-    criterion = criterion.cuda()
+    D = D.cuda()
+    G = G.cuda()
+else:
+    logger.info("Running on CPU")
 
 ###############################################################################
 # Training code
@@ -153,7 +160,7 @@ def validate_disc(data_batches):
     # Turn on evaluation mode which disables dropout.
     char_ae.eval()
     word_ae.eval()
-    gan_disc.eval()
+    D.eval()
 
     total_correct = 0
     total_count = 0
@@ -182,10 +189,8 @@ def validate_disc(data_batches):
         flong_encoding = char_ae(flong_form, flong_lengths, noise=False, encode_only=True)
 
         # energy of real/fake examples
-        energy_pos = gan_disc(short_encoding.detach(), long_encoding.detach(), context_encoding.detach())
-        energy_neg = gan_disc(short_encoding.detach(), flong_encoding.detach(), context_encoding.detach())
-
-        total_loss += criterion(energy_pos, energy_neg).item()
+        energy_pos = D(short_encoding.detach(), long_encoding.detach(), context_encoding.detach())
+        energy_neg = D(short_encoding.detach(), flong_encoding.detach(), context_encoding.detach())
 
         total_correct += torch.lt(energy_pos, energy_neg).sum().item()
         total_count += short_lengths.size(0)
@@ -195,17 +200,17 @@ def validate_disc(data_batches):
     return total_loss/float(total_count) , float(total_correct)/float(total_count), total_correct, total_count
 
 
-def train_gan_d(batch):
+def train_GAN(batch, train_G):
     char_ae.train()
     word_ae.train()
-    gan_disc.train()
-    optimizer_gan_d.zero_grad()
+    D.train()
+    optimizer_D.zero_grad()
 
     # + samples
     short_form, short_lengths = batch['short']
     long_form, long_lengths = batch['long']
     context, context_lengths = batch['context']
-    flong_form, flong_lengths = batch['fake_long']
+    noise = Variable(torch.ones(args.batch_size, args.z_size).normal_(0, 1))
 
     if torch.cuda.is_available():
         short_form = short_form.cuda()
@@ -214,47 +219,66 @@ def train_gan_d(batch):
         long_lengths = long_lengths.cuda()
         context = context.cuda()
         context_lengths = context_lengths.cuda()
-        flong_form = flong_form.cuda()
-        flong_lengths = flong_lengths.cuda()
+        noise = noise.cuda()
 
-    short_encoding = char_ae(short_form, short_lengths, noise=False, encode_only=True)
-    long_encoding = char_ae(long_form, long_lengths, noise=False, encode_only=True)
-    context_encoding = word_ae(context, context_lengths, noise=False, encode_only=True)
-    flong_encoding = char_ae(flong_form, flong_lengths, noise=False, encode_only=True)
+    short_encoding = char_ae(short_form, short_lengths, noise=False, encode_only=True).detach()
+    long_encoding = char_ae(long_form, long_lengths, noise=False, encode_only=True).detach()
+    context_encoding = word_ae(context, context_lengths, noise=False, encode_only=True).detach()
+    # fake_long_encoding = char_ae(flong_form, flong_lengths, noise=False, encode_only=True)
+
+    fake_long_encoding = G(noise, short_encoding, context_encoding)
 
     # energy of real/fake examples
-    energy_pos = gan_disc(short_encoding.detach(), long_encoding.detach(), context_encoding.detach())
-    energy_neg = gan_disc(short_encoding.detach(), flong_encoding.detach(), context_encoding.detach())
+    real_D_loss = D(short_encoding, long_encoding, context_encoding).mean()
+    fake_D_loss = D(short_encoding, fake_long_encoding.detach(), context_encoding).mean()
 
     # compute the loss and back-propagate it
-    energy_loss = criterion(energy_pos, energy_neg)
-    energy_loss.backward()
+    D_loss = fake_D_loss - real_D_loss
 
-    penalize_score = True
+    penalize_score = False
     penalize_gradient = True
     lamda = 10
+    score_penalty_loss = 0.0
+    gradient_penalty_loss = 0.0
+
     if penalize_score:
-        penalty = score_penalty(gan_disc, real_data=(short_encoding.detach(), long_encoding.detach(), context_encoding.detach()))
-        (lamda * penalty).backward()
+        score_penalty_loss = score_penalty(D, real_data=(short_encoding, long_encoding, context_encoding))
+        D_loss += (lamda * score_penalty_loss)
+        score_penalty_loss = score_penalty_loss.item()
+
     if penalize_gradient:
-        penalty = gradient_penalty(gan_disc, real_data=(short_encoding.detach(), long_encoding.detach(), context_encoding.detach()),
-                                   fake_data=(short_encoding.detach(), flong_encoding.detach(), context_encoding.detach()))
-        (lamda * penalty).backward()
+        gradient_penalty_loss = gradient_penalty(D,
+                                   real_data=(short_encoding, long_encoding, context_encoding),
+                                   fake_data=(short_encoding, fake_long_encoding.detach(), context_encoding))
+        D_loss += (lamda * gradient_penalty_loss)
+        gradient_penalty_loss = gradient_penalty_loss.item()
 
-    optimizer_gan_d.step()
+    # final disc cost
+    D_loss.backward()
+    optimizer_D.step()
 
-    return energy_loss, energy_pos, energy_neg
+    if train_G:
+        noise = Variable(torch.ones(args.batch_size, args.z_size).normal_(0, 1))
+        if torch.cuda.is_available():
+            noise = noise.cuda()
+        fake_long_encoding = G(noise, short_encoding, context_encoding)
+        G_loss = D(short_encoding, fake_long_encoding, context_encoding).mean()
+        (-G_loss).backward()
+        optimizer_G.step()
+
+    return D_loss.item(), real_D_loss.item(), fake_D_loss.item(), score_penalty_loss, gradient_penalty_loss
 
 
 def train():
-    logger.info("Training text AE")
-
     # gan: preparation
     if args.niters_gan_schedule != "":
         gan_schedule = [int(x) for x in args.niters_gan_schedule.split("-")]
     else:
         gan_schedule = []
     niter_gan = 1
+
+    global global_step
+    global_step = 0
 
     best_valid_acc = None
     eval_batch_size = args.batch_size
@@ -278,56 +302,70 @@ def train():
             niter_gan += 1
             logger.info("GAN training loop schedule: {}".format(niter_gan))
 
-        total_loss, real_energy, fake_energy = 0.0, 0.0, 0.0
+        D_losses, w_dists, real_energy, fake_energy, SP_losses, GP_losses = [], [], [], [], [], []
         epoch_start_time = time.time()
         start_time = time.time()
 
         # train
         for i in range(len(train_data)):
-            # logger.info("train batch %d" % i)
-            loss, errD_real, errD_fake = train_gan_d(train_data[i])
-            total_loss += loss
-            real_energy += errD_real.mean().item()
-            fake_energy += errD_fake.mean().item()
+            # update global_step here, might be used in TensorboardX later
+            global_step += 1
 
-            if i % args.log_interval == 0:
+            D_loss, real_D_loss, fake_D_loss, score_penalty_loss, gradient_penalty_loss\
+                = train_GAN(train_data[i], train_G=(i % args.niters_gan_g == 0))
+
+            D_losses.append(D_loss)
+            w_dists.append((real_D_loss-fake_D_loss))
+            real_energy.append(real_D_loss)
+            fake_energy.append(fake_D_loss)
+            SP_losses.append(score_penalty_loss)
+            GP_losses.append(gradient_penalty_loss)
+
+            if global_step % args.log_interval == 0:
                 elapsed = time.time() - start_time
-                cur_loss = total_loss / args.log_interval
-                logger.info('| epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
-                        'loss {:5.2f} | real energy {:8.2f} | fake energy {:8.2f}'.format(
-                    epoch, i, len(train_data), elapsed * 1000 / args.log_interval,
-                    cur_loss.item(), real_energy, fake_energy)
+                logger.info('| step {:3d} | epoch {:3d} | {:5d}/{:5d} batches | ms/batch {:5.2f} | '
+                            'D-loss {:5.2f} | Estimated W-dist {:5.2f} | '
+                            'real energy {:8.2f} | fake energy {:8.2f} | '
+                            'score penalty {:8.2f} | gradient penalty {:8.2f}'.format(
+                    global_step, epoch, i, len(train_data), elapsed * 1000 / args.log_interval,
+                    np.average(D_losses), np.average(w_dists),
+                    np.average(real_energy), np.average(fake_energy),
+                    np.average(SP_losses), np.average(GP_losses)
                 )
-                total_loss, real_energy, fake_energy = 0.0, 0.0, 0.0
+                )
+                D_losses, w_dists, real_energy, fake_energy, SP_losses, GP_losses = [], [], [], [], [], []
                 start_time = time.time()
 
-        # validate
-        valid_loss, valid_acc, total_correct, total_count = validate_disc(test_data)
-        logger.info('| end of epoch {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
-                'acc {:3.3f} | #(correct) = {} | #(all) = {}'
-                .format(epoch, (time.time() - epoch_start_time),
-                        valid_loss, valid_acc, total_correct, total_count))
+            if global_step % args.save_every == 0:
+                save_ckpt(ckpt_name="ckpt_epoch%d" % epoch, save_dir=args.save,
+                          model_dict={"char_ae": char_ae, "word_ae": word_ae, "D": D},
+                          args=args, vocab=(char_vocab.word2idx, word_vocab.word2idx))
 
-        save_ckpt(ckpt_name="ckpt_epoch%d" % epoch, save_dir=args.save,
-                  model_dict={"char_ae": char_ae, "word_ae": word_ae, "gan_disc": gan_disc},
-                  args=args, vocab=(char_vocab.word2idx, word_vocab.word2idx))
-        if best_valid_acc is None or valid_acc > best_valid_acc:
-            impatience = 0
-            best_valid_acc = valid_acc
-            logger.info("New saving model: epoch {}, best acc={}.".format(epoch, best_valid_acc))
-            save_ckpt(ckpt_name="ckpt_epoch%d-best@%f" % (epoch, best_valid_acc),
-                      save_dir=args.save,
-                      model_dict={"char_ae": char_ae, "word_ae": word_ae, "gan_disc": gan_disc},
-                      args=args, vocab=(char_vocab.word2idx, word_vocab.word2idx)
-                )
-        else:
-            logger.info("Epoch {}, acc={}.".format(epoch, valid_acc))
+            if global_step % args.valid_every == 0:
+                # validate
+                valid_loss, valid_acc, total_correct, total_count = validate_disc(test_data)
+                logger.info('| Validation {:3d} | time: {:5.2f}s | test loss {:5.2f} | '
+                        'acc {:3.3f} | #(correct) = {} | #(all) = {}'
+                        .format(epoch, (time.time() - epoch_start_time),
+                                valid_loss, valid_acc, total_correct, total_count))
 
-            if not args.no_earlystopping and epoch >= args.min_epochs:
-                impatience += 1
-                if impatience > args.patience:
-                    logger.info("Ending training")
-                    sys.exit()
+                if best_valid_acc is None or valid_acc > best_valid_acc:
+                    impatience = 0
+                    best_valid_acc = valid_acc
+                    logger.info("New saving model: epoch {}, best acc={}.".format(epoch, best_valid_acc))
+                    save_ckpt(ckpt_name="ckpt_epoch%d-best@%f" % (epoch, best_valid_acc),
+                              save_dir=args.save,
+                              model_dict={"char_ae": char_ae, "word_ae": word_ae, "D": D},
+                              args=args, vocab=(char_vocab.word2idx, word_vocab.word2idx)
+                        )
+                else:
+                    logger.info("Epoch {}, acc={}.".format(epoch, valid_acc))
+
+                    if not args.no_earlystopping and epoch >= args.min_epochs:
+                        impatience += 1
+                        if impatience > args.patience:
+                            logger.info("Ending training")
+                            sys.exit()
 
 if __name__ == '__main__':
     train()
